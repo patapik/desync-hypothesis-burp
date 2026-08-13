@@ -13,16 +13,28 @@ import javax.swing.*;
 import java.awt.Component;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class DesyncContextMenu implements ContextMenuItemsProvider {
 
     private final MontoyaApi api;
     private final HypothesisGenerator generator = new HypothesisGenerator();
     private final DesyncReplayer replayer;
+    private final AtomicBoolean unloaded;
+    private final List<Thread> scanThreads = new CopyOnWriteArrayList<>();
 
-    public DesyncContextMenu(MontoyaApi api, DesyncReplayer replayer) {
+    public DesyncContextMenu(MontoyaApi api, DesyncReplayer replayer, AtomicBoolean unloaded) {
         this.api = api;
         this.replayer = replayer;
+        this.unloaded = unloaded;
+    }
+
+    /** Called by the extension's unloading handler: interrupt any running quick scans. */
+    public void shutdown() {
+        for (Thread thread : scanThreads) {
+            thread.interrupt();
+        }
     }
 
     @Override
@@ -59,16 +71,25 @@ public class DesyncContextMenu implements ContextMenuItemsProvider {
         generator.setBase(path == null || path.isEmpty() ? "/" : path);
         List<Hypothesis> hyps = generator.generate(20);
 
-        new Thread(() -> {
-            for (Hypothesis hyp : hyps) {
-                if ("h2".equals(hyp.nativeEngine)) {
-                    api.logging().logToOutput(hyp.id + " -> skipped (h2-native: needs binary HTTP/2 frame engine)");
-                    continue;
+        Thread scan = new Thread(() -> {
+            try {
+                for (Hypothesis hyp : hyps) {
+                    if (unloaded.get() || Thread.currentThread().isInterrupted()) {
+                        return;
+                    }
+                    if ("h2".equals(hyp.nativeEngine)) {
+                        api.logging().logToOutput(hyp.id + " -> skipped (h2-native: needs binary HTTP/2 frame engine)");
+                        continue;
+                    }
+                    ClassifyResult result = replayer.replay(hyp, host, port, tls);
+                    api.logging().logToOutput(hyp.id + " -> " + result);
                 }
-                ClassifyResult result = replayer.replay(hyp, host, port, tls);
-                api.logging().logToOutput(hyp.id + " -> " + result);
+                api.logging().logToOutput("Quick desync scan finished for " + host + ":" + port);
+            } finally {
+                scanThreads.remove(Thread.currentThread());
             }
-            api.logging().logToOutput("Quick desync scan finished for " + host + ":" + port);
-        }, "desync-quick-scan").start();
+        }, "desync-quick-scan");
+        scanThreads.add(scan);
+        scan.start();
     }
 }

@@ -14,6 +14,7 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class CortexTab extends JPanel {
 
@@ -23,6 +24,8 @@ public class CortexTab extends JPanel {
 
     private final MontoyaApi api;
     private final DesyncReplayer replayer;
+    private final AtomicBoolean unloaded;
+    private volatile SwingWorker<?, ?> currentWorker;
 
     private final JTextField baseField = new JTextField("/desync-check", 20);
     private final JTextField smuggledPathField = new JTextField("/desync-check-smuggled", 20);
@@ -39,10 +42,19 @@ public class CortexTab extends JPanel {
     private final DefaultTableModel tableModel = new DefaultTableModel(
             new Object[]{"ID", "Category", "Expect", "Verdict", "First", "Followup", "Time (ms)"}, 0);
 
-    public CortexTab(MontoyaApi api, DesyncReplayer replayer) {
+    public CortexTab(MontoyaApi api, DesyncReplayer replayer, AtomicBoolean unloaded) {
         this.api = api;
         this.replayer = replayer;
+        this.unloaded = unloaded;
         buildUi();
+    }
+
+    /** Called by the extension's unloading handler: stop the running scan cleanly. */
+    public void shutdown() {
+        SwingWorker<?, ?> worker = currentWorker;
+        if (worker != null) {
+            worker.cancel(true);
+        }
     }
 
     private void buildUi() {
@@ -149,7 +161,7 @@ public class CortexTab extends JPanel {
 
         List<Hypothesis> hyps = generator.generate(max);
 
-        new SwingWorker<Void, Object[]>() {
+        SwingWorker<Void, Object[]> worker = new SwingWorker<>() {
             @Override
             protected Void doInBackground() {
                 // Fingerprint the follow-up and smuggled resources once, so the
@@ -160,6 +172,9 @@ public class CortexTab extends JPanel {
                         + " smuggled=" + sigInfo(baseline == null ? null : baseline.smuggledSig));
 
                 for (Hypothesis hyp : hyps) {
+                    if (unloaded.get() || isCancelled()) {
+                        return null;
+                    }
                     if ("h2".equals(hyp.nativeEngine)) {
                         publish(new Object[]{hyp.id, hyp.category, hyp.expect, "skipped", "-", "-", "-"});
                         continue;
@@ -170,7 +185,7 @@ public class CortexTab extends JPanel {
                             result.firstStatus, result.followupStatus, result.elapsedMs
                     });
                 }
-                if (client != null) {
+                if (client != null && !unloaded.get() && !isCancelled()) {
                     pollOob(client);
                 }
                 return null;
@@ -185,9 +200,12 @@ public class CortexTab extends JPanel {
 
             @Override
             protected void done() {
+                currentWorker = null;
                 runButton.setEnabled(true);
             }
-        }.execute();
+        };
+        currentWorker = worker;
+        worker.execute();
     }
 
     /**
@@ -201,6 +219,9 @@ public class CortexTab extends JPanel {
      */
     private void pollOob(CollaboratorClient client) {
         for (int i = 0; i < 6; i++) {
+            if (unloaded.get()) {
+                return;
+            }
             try {
                 Thread.sleep(2000);
             } catch (InterruptedException ie) {
