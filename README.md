@@ -10,6 +10,8 @@ framing-aware classifier. Port of the GGSec Cortex CSD engine.
 > ⚠️ Intrusive: it sends deliberately malformed HTTP framing and can poison connections.
 > Only run it against systems you are authorized to test.
 
+![Desync Scanner tab running against a local CSD lab, with an OOB SSRF confirmed](docs/screenshot.png)
+
 ## Features
 
 - ~56 hypotheses across TE obfuscation, duplicate/CL.0, chunk anomalies, chunked
