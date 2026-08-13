@@ -3,6 +3,7 @@ name: build
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   pull_request:
 
 jobs:
@@ -26,3 +27,29 @@ jobs:
           name: desync-hypothesis-burp
           path: build/libs/desync-hypothesis-burp.jar
           if-no-files-found: error
+
+  # On a version tag (e.g. `git tag v1.0.0 && git push origin v1.0.0`), attach the
+  # freshly built jar to the GitHub Release so users can download it without building.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build jar
+        run: ./gradlew jar --no-daemon
+
+      - name: Publish jar to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/libs/desync-hypothesis-burp.jar
+          fail_on_unmatched_files: true

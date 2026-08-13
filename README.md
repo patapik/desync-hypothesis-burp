@@ -22,6 +22,11 @@ framing-aware classifier. Port of the GGSec Cortex CSD engine.
 - Out-of-band SSRF / routing-confusion detection via **Burp Collaborator**.
 - Suite tab UI + right-click "quick" context-menu scan.
 
+## Download
+
+Grab the prebuilt `desync-hypothesis-burp.jar` from the [Releases](../../releases) page
+(attached to every tagged release), or build it from source below.
+
 ## Build
 
 Requires JDK 17+. The Gradle wrapper is included.
