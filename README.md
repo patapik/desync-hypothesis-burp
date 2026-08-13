@@ -22,6 +22,31 @@ framing-aware classifier. Port of the GGSec Cortex CSD engine.
 - Out-of-band SSRF / routing-confusion detection via **Burp Collaborator**.
 - Suite tab UI + right-click "quick" context-menu scan.
 
+## Why raw sockets, and how this differs from HTTP Request Smuggler
+
+**Why raw sockets.** Request smuggling depends on sending *deliberately malformed or
+ambiguous* HTTP framing — conflicting `Content-Length` / `Transfer-Encoding`, bare CR/LF,
+oversize or mis-terminated chunks, pipelined bytes — and then reading the raw response
+stream to spot a second, *queued* response. Burp's normalized HTTP stack
+(`Http.sendRequest` / the Montoya request API) re-frames and validates every request, so
+it cannot emit these byte-exact payloads. The extension therefore talks to the target over
+a raw `Socket` / `SSLSocket`. (Trade-off: probes do not route through Burp's upstream proxy
+configuration — the same design choice made by other smuggling tooling.)
+
+**How it differs from HTTP Request Smuggler.** *HTTP Request Smuggler* (by albinowax /
+PortSwigger, available in the BApp Store) is the canonical, powerful tool that drives
+specific detect/exploit techniques and integrates with Burp's scanner and Turbo Intruder.
+This extension takes a different angle and is **complementary, not a replacement**:
+
+- **Hypothesis-library fuzzer:** one pass sweeps ~56 framing mutations across many families
+  and reports a per-hypothesis verdict table, for fast triage of *which* desync classes a
+  given front-end/back-end pair is vulnerable to.
+- **Oracle-free, framing-aware classifier:** `desync` requires a genuinely queued second
+  response (response #1 parsed by its own CL/chunked framing), plus a response-identity
+  check that catches "quiet 200/200" queue poisons — aimed at a low false-positive rate.
+- **First-class Collaborator OOB:** absolute-form routing-confusion / SSRF is confirmed
+  out-of-band natively (`oob-confirmed` / `oob-dns`).
+
 ## Download
 
 Grab the prebuilt `desync-hypothesis-burp.jar` from the [Releases](../../releases) page
