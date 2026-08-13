@@ -1,0 +1,32 @@
+# Build output
+build/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Gradle
+.gradle/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+bin/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs / scratch
+*.log
+
+# Internal working notes / cross-project bug reports (kept locally, not published)
+/tasks/
+/bugCortex.md
+
+# Local screenshots (not published unless explicitly added)
+/Screen*.png
